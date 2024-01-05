@@ -1,6 +1,6 @@
 use std::fmt;
 
-use openssl::symm::{Cipher, Crypter, Mode};
+use boring::symm::{Cipher, Crypter, Mode};
 
 use crate::dtls::KeyingMaterial;
 use crate::dtls::SrtpProfile;
@@ -663,9 +663,8 @@ mod aes_128_cm_sha1_80 {
 
     use std::fmt;
 
-    use openssl::cipher;
-    use openssl::cipher_ctx::CipherCtx;
-    use openssl::error::ErrorStack;
+    use boring::symm::{self, Crypter, Mode};
+    use boring::error::ErrorStack;
 
     use crate::io::Sha1;
 
@@ -674,16 +673,14 @@ mod aes_128_cm_sha1_80 {
     type RtpIv = [u8; 16];
 
     pub(super) struct Encrypter {
-        ctx: CipherCtx,
+        t: symm::Cipher,
+        key: AesKey,
     }
 
     impl Encrypter {
         pub(super) fn new(key: AesKey) -> Self {
-            let t = cipher::Cipher::aes_128_ctr();
-            let mut ctx = CipherCtx::new().expect("a reusable cipher context");
-            ctx.encrypt_init(Some(t), Some(&key[..]), None)
-                .expect("enc init");
-            Encrypter { ctx }
+            let t = symm::Cipher::aes_128_ctr();
+            Encrypter { t, key }
         }
 
         pub(super) fn encrypt(
@@ -692,24 +689,22 @@ mod aes_128_cm_sha1_80 {
             input: &[u8],
             output: &mut [u8],
         ) -> Result<(), ErrorStack> {
-            self.ctx.encrypt_init(None, None, Some(iv))?;
-            let count = self.ctx.cipher_update(input, Some(output))?;
-            self.ctx.cipher_final(&mut output[count..])?;
+            let mut ctx = Crypter::new(self.t, Mode::Encrypt, &self.key[..], Some(iv))?;
+            let count = ctx.update(input, output)?;
+            ctx.finalize(&mut output[count..])?;
             Ok(())
         }
     }
 
     pub(super) struct Decrypter {
-        ctx: CipherCtx,
+        t: symm::Cipher,
+        key: AesKey,
     }
 
     impl Decrypter {
         pub(super) fn new(key: AesKey) -> Self {
-            let t = cipher::Cipher::aes_128_ctr();
-            let mut ctx = CipherCtx::new().expect("a reusable cipher context");
-            ctx.decrypt_init(Some(t), Some(&key[..]), None)
-                .expect("enc init");
-            Decrypter { ctx }
+            let t = symm::Cipher::aes_128_ctr();
+            Decrypter { t, key }
         }
 
         pub(super) fn decrypt(
@@ -718,9 +713,9 @@ mod aes_128_cm_sha1_80 {
             input: &[u8],
             output: &mut [u8],
         ) -> Result<(), ErrorStack> {
-            self.ctx.decrypt_init(None, None, Some(iv))?;
-            let count = self.ctx.cipher_update(input, Some(output))?;
-            self.ctx.cipher_final(&mut output[count..])?;
+            let mut ctx = Crypter::new(self.t, Mode::Decrypt, &self.key[..], Some(iv))?;
+            let count = ctx.update(input, output)?;
+            ctx.finalize(&mut output[count..])?;
             Ok(())
         }
     }
@@ -821,9 +816,8 @@ mod aead_aes_128_gcm {
     // | AEAD authentication tag length | 128 bits                     |
     // +--------------------------------+------------------------------+
 
-    use openssl::cipher;
-    use openssl::cipher_ctx::CipherCtx;
-    use openssl::error::ErrorStack;
+    use boring::symm::{self, Crypter, Mode};
+    use boring::error::ErrorStack;
 
     pub(super) const KEY_LEN: usize = 16;
     pub(super) const SALT_LEN: usize = 12;
@@ -837,19 +831,14 @@ mod aead_aes_128_gcm {
     type RtpIv = [u8; SALT_LEN];
 
     pub(super) struct Encrypter {
-        ctx: CipherCtx,
+        t: symm::Cipher,
+        key: EncryptionKey,
     }
 
     impl Encrypter {
         pub(super) fn new(key: &EncryptionKey) -> Self {
-            let t = cipher::Cipher::aes_128_gcm();
-            let mut ctx = CipherCtx::new().expect("a reusable cipher context");
-            ctx.encrypt_init(Some(t), Some(key), None)
-                .expect("enc init");
-            ctx.set_iv_length(IV_LEN).expect("IV length");
-            ctx.set_padding(false);
-
-            Self { ctx }
+            let t = symm::Cipher::aes_128_gcm();
+            Self { t, key: *key }
         }
 
         pub(super) fn encrypt(
@@ -864,39 +853,33 @@ mod aead_aes_128_gcm {
                 "Associated data length MUST be at least 12 octets"
             );
 
-            // Set the IV
-            self.ctx.encrypt_init(None, None, Some(iv))?;
+            let mut ctx = Crypter::new(self.t, Mode::Encrypt, &self.key[..], Some(iv))?;
+            ctx.pad(false);
 
-            // Add the additional authenticated data, omitting the output argument informs
-            // OpenSSL that we are providing AAD.
-            let aad_c = self.ctx.cipher_update(aad, None)?;
-            // TODO: This should maybe be an error
-            assert!(aad_c == aad.len());
+            // Add the additional authenticated data.
+            ctx.aad_update(aad)?;
 
-            let count = self.ctx.cipher_update(input, Some(output))?;
-            let final_count = self.ctx.cipher_final(&mut output[count..])?;
+            let count = ctx.update(input, output)?;
+            let final_count = ctx.finalize(&mut output[count..])?;
 
             // Get the authentication tag and append it to the output
             let tag_offset = count + final_count;
-            self.ctx
-                .tag(&mut output[tag_offset..tag_offset + TAG_LEN])?;
+            ctx
+                .get_tag(&mut output[tag_offset..tag_offset + TAG_LEN])?;
 
             Ok(())
         }
     }
 
     pub(super) struct Decrypter {
-        ctx: CipherCtx,
+        t: symm::Cipher,
+        key: DecryptionKey,
     }
 
     impl Decrypter {
         pub(super) fn new(key: &DecryptionKey) -> Self {
-            let t = cipher::Cipher::aes_128_gcm();
-            let mut ctx = CipherCtx::new().expect("a reusable cipher context");
-            ctx.decrypt_init(Some(t), Some(key), None)
-                .expect("dec init");
-
-            Self { ctx }
+            let t = symm::Cipher::aes_128_gcm();
+            Self { t, key: *key }
         }
 
         pub(super) fn decrypt(
@@ -910,20 +893,18 @@ mod aead_aes_128_gcm {
             assert!(input.len() >= TAG_LEN);
 
             let (cipher_text, tag) = input.split_at(input.len() - TAG_LEN);
-            self.ctx.decrypt_init(None, None, Some(iv))?;
+            let mut ctx = Crypter::new(self.t, Mode::Decrypt, &self.key[..], Some(iv))?;
 
-            // Add the additional authenticated data, omitting the output argument informs
-            // OpenSSL that we are providing AAD.
+            // Add the additional authenticated data.
             // With this the authentication tag will be verified.
             for aad in aads {
-                self.ctx.cipher_update(aad, None)?;
+                ctx.aad_update(aad)?;
             }
 
-            self.ctx.set_tag(tag)?;
+            ctx.set_tag(tag)?;
 
-            let count = self.ctx.cipher_update(cipher_text, Some(output))?;
-
-            let final_count = self.ctx.cipher_final(&mut output[count..])?;
+            let count = ctx.update(cipher_text, output)?;
+            let final_count = ctx.finalize(&mut output[count..])?;
 
             Ok(count + final_count)
         }

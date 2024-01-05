@@ -1,16 +1,16 @@
-use openssl::asn1::Asn1Type;
-use openssl::asn1::{Asn1Integer, Asn1Time};
-use openssl::bn::BigNum;
-use openssl::ec::EcKey;
-use openssl::hash::MessageDigest;
-use openssl::nid::Nid;
-use openssl::pkey::{PKey, Private};
-use openssl::rsa::Rsa;
-use openssl::srtp::SrtpProfileId;
-use openssl::ssl::{HandshakeError, MidHandshakeSslStream, Ssl, SslStream};
-use openssl::ssl::{SslContext, SslContextBuilder, SslMethod, SslOptions, SslVerifyMode};
-use openssl::x509::X509Name;
-use openssl::x509::X509;
+use boring::asn1::Asn1Type;
+use boring::asn1::{Asn1Integer, Asn1Time};
+use boring::bn::BigNum;
+use boring::ec::EcKey;
+use boring::hash::MessageDigest;
+use boring::nid::Nid;
+use boring::pkey::{PKey, Private};
+use boring::rsa::Rsa;
+use boring::srtp::SrtpProfileId;
+use boring::ssl::{HandshakeError, MidHandshakeSslStream, Ssl, SslStream};
+use boring::ssl::{SslContext, SslContextBuilder, SslMethod, SslOptions, SslVerifyMode};
+use boring::x509::X509Name;
+use boring::x509::X509;
 
 use std::io;
 use std::mem;
@@ -402,7 +402,9 @@ impl TryFrom<SrtpProfileId> for SrtpProfile {
     fn try_from(value: SrtpProfileId) -> Result<Self, Self::Error> {
         match value {
             SrtpProfileId::SRTP_AES128_CM_SHA1_80 => Ok(SrtpProfile::Aes128CmSha1_80),
-            SrtpProfileId::SRTP_AEAD_AES_128_GCM => Ok(SrtpProfile::AeadAes128Gcm),
+            // SrtpProfileId::SRTP_AEAD_AES_128_GCM => Ok(SrtpProfile::AeadAes128Gcm),
+            // Hack to maintain compatibility (and pass tests).
+            id if id.as_raw() == 7 => Ok(SrtpProfile::AeadAes128Gcm),
             x => Err(io::Error::new(
                 io::ErrorKind::Other,
                 format!("Unsupported SRTP profile {:x}", x.as_raw()),

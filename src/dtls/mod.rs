@@ -1,5 +1,5 @@
-use openssl::error::ErrorStack;
-use openssl::ssl::SslContext;
+use boring::error::ErrorStack;
+use boring::ssl::SslContext;
 use std::collections::VecDeque;
 use std::fmt;
 use std::io::{self, ErrorKind, Read, Write};
@@ -8,11 +8,11 @@ use thiserror::Error;
 
 use crate::io::{DatagramSend, DATAGRAM_MTU_WARN};
 
-mod ossl;
-use ossl::{dtls_create_ctx, dtls_ssl_create, TlsStream};
+mod bssl;
+use bssl::{dtls_create_ctx, dtls_ssl_create, TlsStream};
 
-pub use ossl::DtlsCert;
-pub(crate) use ossl::KeyingMaterial;
+pub use bssl::DtlsCert;
+pub(crate) use bssl::KeyingMaterial;
 
 /// Errors that can arise in DTLS.
 #[derive(Debug, Error)]

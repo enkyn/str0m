@@ -1,6 +1,6 @@
 use std::io;
 
-use openssl::error::ErrorStack;
+use boring::error::ErrorStack;
 use thiserror::Error;
 
 mod id;
