@@ -40,6 +40,8 @@ pub struct DtlsCert(DtlsCertInner);
 enum DtlsCertInner {
     #[cfg(feature = "openssl")]
     OpenSsl(super::ossl::OsslDtlsCert),
+    #[cfg(feature = "boring")]
+    BoringSsl(super::bssl::BsslDtlsCert),
 }
 
 impl DtlsCert {
@@ -50,6 +52,13 @@ impl DtlsCert {
         DtlsCert(DtlsCertInner::OpenSsl(cert))
     }
 
+    /// Create a new BoringSSL variant of the certificate.
+    #[cfg(feature = "boring")]
+    pub fn new_boringssl() -> Self {
+        let cert = super::bssl::BsslDtlsCert::new();
+        DtlsCert(DtlsCertInner::BoringSsl(cert))
+    }
+
     /// Creates a fingerprint for this certificate.
     ///
     /// Fingerprints are used to verify a remote peer's certificate.
@@ -57,6 +66,8 @@ impl DtlsCert {
         match &self.0 {
             #[cfg(feature = "openssl")]
             DtlsCertInner::OpenSsl(v) => v.fingerprint(),
+            #[cfg(feature = "boring")]
+            DtlsCertInner::BoringSsl(v) => v.fingerprint(),
             _ => unreachable!(),
         }
     }
@@ -65,6 +76,10 @@ impl DtlsCert {
         match &self.0 {
             #[cfg(feature = "openssl")]
             DtlsCertInner::OpenSsl(c) => Ok(DtlsImpl::OpenSsl(super::ossl::OsslDtlsImpl::new(
+                c.clone(),
+            )?)),
+            #[cfg(feature = "boring")]
+            DtlsCertInner::BoringSsl(c) => Ok(DtlsImpl::BoringSsl(super::bssl::BsslDtlsImpl::new(
                 c.clone(),
             )?)),
             _ => unreachable!(),
@@ -77,6 +92,8 @@ impl fmt::Debug for DtlsCert {
         match &self.0 {
             #[cfg(feature = "openssl")]
             DtlsCertInner::OpenSsl(c) => c.fmt(f),
+            #[cfg(feature = "boring")]
+            DtlsCertInner::BoringSsl(c) => c.fmt(f),
             _ => unreachable!(),
         }
     }
@@ -111,12 +128,14 @@ pub trait DtlsInner: Sized {
 pub enum DtlsImpl {
     #[cfg(feature = "openssl")]
     OpenSsl(super::ossl::OsslDtlsImpl),
+    #[cfg(feature = "boring")]
+    BoringSsl(super::bssl::BsslDtlsImpl),
 }
 
+#[cfg(feature = "openssl")]
 impl DtlsImpl {
     pub fn set_active(&mut self, active: bool) {
         match self {
-            #[cfg(feature = "openssl")]
             DtlsImpl::OpenSsl(i) => i.set_active(active),
             _ => unreachable!(),
         }
@@ -124,7 +143,6 @@ impl DtlsImpl {
 
     pub fn handle_handshake(&mut self, o: &mut VecDeque<DtlsEvent>) -> Result<bool, CryptoError> {
         match self {
-            #[cfg(feature = "openssl")]
             DtlsImpl::OpenSsl(i) => i.handle_handshake(o),
             _ => unreachable!(),
         }
@@ -132,7 +150,6 @@ impl DtlsImpl {
 
     pub fn is_active(&self) -> Option<bool> {
         match self {
-            #[cfg(feature = "openssl")]
             DtlsImpl::OpenSsl(i) => i.is_active(),
             _ => unreachable!(),
         }
@@ -144,7 +161,6 @@ impl DtlsImpl {
         o: &mut VecDeque<DtlsEvent>,
     ) -> Result<(), CryptoError> {
         match self {
-            #[cfg(feature = "openssl")]
             DtlsImpl::OpenSsl(i) => i.handle_receive(m, o),
             _ => unreachable!(),
         }
@@ -152,7 +168,6 @@ impl DtlsImpl {
 
     pub fn poll_datagram(&mut self) -> Option<DatagramSend> {
         match self {
-            #[cfg(feature = "openssl")]
             DtlsImpl::OpenSsl(i) => i.poll_datagram(),
             _ => unreachable!(),
         }
@@ -160,7 +175,6 @@ impl DtlsImpl {
 
     pub fn handle_input(&mut self, data: &[u8]) -> Result<(), CryptoError> {
         match self {
-            #[cfg(feature = "openssl")]
             DtlsImpl::OpenSsl(i) => i.handle_input(data),
             _ => unreachable!(),
         }
@@ -168,8 +182,63 @@ impl DtlsImpl {
 
     pub fn is_connected(&self) -> bool {
         match self {
-            #[cfg(feature = "openssl")]
             DtlsImpl::OpenSsl(i) => i.is_connected(),
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[cfg(feature = "boring")]
+impl DtlsImpl {
+    pub fn set_active(&mut self, active: bool) {
+        match self {
+            DtlsImpl::BoringSsl(i) => i.set_active(active),
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn handle_handshake(&mut self, o: &mut VecDeque<DtlsEvent>) -> Result<bool, CryptoError> {
+        match self {
+            DtlsImpl::BoringSsl(i) => i.handle_handshake(o),
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn is_active(&self) -> Option<bool> {
+        match self {
+            DtlsImpl::BoringSsl(i) => i.is_active(),
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn handle_receive(
+        &mut self,
+        m: &[u8],
+        o: &mut VecDeque<DtlsEvent>,
+    ) -> Result<(), CryptoError> {
+        match self {
+            DtlsImpl::BoringSsl(i) => i.handle_receive(m, o),
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn poll_datagram(&mut self) -> Option<DatagramSend> {
+        match self {
+            DtlsImpl::BoringSsl(i) => i.poll_datagram(),
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn handle_input(&mut self, data: &[u8]) -> Result<(), CryptoError> {
+        match self {
+            DtlsImpl::BoringSsl(i) => i.handle_input(data),
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn is_connected(&self) -> bool {
+        match self {
+            DtlsImpl::BoringSsl(i) => i.is_connected(),
             _ => unreachable!(),
         }
     }

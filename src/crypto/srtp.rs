@@ -46,9 +46,14 @@ pub fn new_aes_128_cm_sha1_80(
         let ctx = super::ossl::OsslSrtpCryptoImpl::new_aes_128_cm_sha1_80(key, encrypt);
         Box::new(ctx)
     }
-    #[cfg(not(feature = "openssl"))]
+    #[cfg(feature = "boring")]
     {
-        panic!("No SRTP implementation. Enable openssl feature");
+        let ctx = super::bssl::BsslSrtpCryptoImpl::new_aes_128_cm_sha1_80(key, encrypt);
+        Box::new(ctx)
+    }
+    #[cfg(not(any(feature = "openssl", feature = "boring")))]
+    {
+        panic!("No SRTP implementation. Enable openssl or boring feature");
     }
 }
 
@@ -66,7 +71,12 @@ pub fn new_aead_aes_128_gcm(key: AeadKey, encrypt: bool) -> Box<dyn aead_aes_128
         let ctx = super::ossl::OsslSrtpCryptoImpl::new_aead_aes_128_gcm(key, encrypt);
         Box::new(ctx)
     }
-    #[cfg(not(feature = "openssl"))]
+    #[cfg(feature = "boring")]
+    {
+        let ctx = super::bssl::BsslSrtpCryptoImpl::new_aead_aes_128_gcm(key, encrypt);
+        Box::new(ctx)
+    }
+    #[cfg(not(any(feature = "openssl", feature = "boring")))]
     {
         panic!("No SRTP implementation. Enable openssl feature");
     }
@@ -82,7 +92,11 @@ pub fn srtp_aes_128_ecb_round(key: &[u8], input: &[u8], output: &mut [u8]) {
     {
         super::ossl::OsslSrtpCryptoImpl::srtp_aes_128_ecb_round(key, input, output)
     }
-    #[cfg(not(feature = "openssl"))]
+    #[cfg(feature = "boring")]
+    {
+        super::bssl::BsslSrtpCryptoImpl::srtp_aes_128_ecb_round(key, input, output)
+    }
+    #[cfg(not(any(feature = "openssl", feature = "boring")))]
     {
         panic!("No SRTP implementation. Enable openssl feature");
     }
@@ -112,8 +126,8 @@ pub mod aes_128_cm_sha1_80 {
     pub const SALT_LEN: usize = 14;
     pub const HMAC_KEY_LEN: usize = 20;
     pub const HMAC_TAG_LEN: usize = 10;
-    pub type AesKey = [u8; 16];
-    pub type RtpSalt = [u8; 14];
+    pub type AesKey = [u8; KEY_LEN];
+    pub type RtpSalt = [u8; SALT_LEN];
     pub type RtpIv = [u8; 16];
 
     pub trait CipherCtx: UnwindSafe + Send + Sync {

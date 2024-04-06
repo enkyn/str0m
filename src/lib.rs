@@ -1024,7 +1024,11 @@ impl Rtc {
             {
                 DtlsCert::new_openssl()
             }
-            #[cfg(not(feature = "openssl"))]
+            #[cfg(feature = "boring")]
+            {
+                DtlsCert::new_boringssl()
+            }
+            #[cfg(not(any(feature = "openssl", feature = "boring")))]
             {
                 panic!("No DTLS implementation. Enable openssl feature");
             }
@@ -1768,7 +1772,10 @@ impl RtcConfig {
     /// ```
     /// # use str0m::RtcConfig;
     /// # use str0m::change::DtlsCert;
+    /// #[cfg(feature = "openssl")]
     /// let dtls_cert = DtlsCert::new_openssl();
+    /// #[cfg(feature = "boring")]
+    /// let dtls_cert = DtlsCert::new_boringssl();
     ///
     /// let rtc_config = RtcConfig::default()
     ///     .set_dtls_cert(dtls_cert);

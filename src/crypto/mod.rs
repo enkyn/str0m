@@ -5,6 +5,8 @@ use thiserror::Error;
 
 #[cfg(feature = "openssl")]
 mod ossl;
+#[cfg(feature = "boring")]
+mod bssl;
 
 mod dtls;
 pub use dtls::{DtlsCert, DtlsEvent, DtlsImpl};
@@ -41,6 +43,11 @@ pub enum CryptoError {
     #[error("{0}")]
     #[cfg(feature = "openssl")]
     OpenSsl(#[from] openssl::error::ErrorStack),
+
+    /// Some error from BoringSSL layer (used for DTLS).
+    #[error("{0}")]
+    #[cfg(feature = "boring")]
+    BoringSsl(#[from] boring::error::ErrorStack),
 
     /// Other IO errors.
     #[error("{0}")]
