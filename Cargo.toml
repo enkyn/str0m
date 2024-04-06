@@ -19,22 +19,22 @@ _internal_dont_use_log_stats = []
 _internal_test_exports = []
 
 [dependencies]
-thiserror = "1.0.38"
-tracing = "0.1.37"
-fastrand = "2.0.1"
-once_cell = "1.17.0"
+thiserror = "1.0.58"
+tracing = "0.1.40"
+fastrand = "2.0.2"
+once_cell = "1.19.0"
 sctp-proto = "0.2.0"
 combine = "4.6.6"
 # Sadly no DTLS support in rustls.
 boring = { version = "4.5.0", optional = true }
 # If you want to use a system provided openssl you can set env variable
 # OPENSSL_NO_VENDOR=1 to override the feature flag vendored
-openssl = { version = "0.10.45", features = ["vendored"], optional = true }
-openssl-sys = { version = "0.9.80", optional = true }
+openssl = { version = "0.10.64", features = ["vendored"], optional = true }
+openssl-sys = { version = "0.9.102", optional = true }
 # STUN
 hmac = "0.12.1"
-crc = "3.0.0"
-serde = { version = "1.0.152", features = ["derive"] }
+crc = "3.0.1"
+serde = { version = "1.0.197", features = ["derive"] }
 
 [target.'cfg(unix)'.dependencies]
 sha-1 = { version = "0.10.1", features = ["asm"] }
@@ -46,10 +46,10 @@ sha-1 = { version = "0.10.1", features = ["asm"] }
 sha-1 = { version = "0.10.1" }
 
 [dev-dependencies]
-rouille = { version = "3.5.0", features = ["rustls"] }
+rouille = { version = "3.6.2", features = ["rustls"] }
 serde_json = "1.0"
-tracing-subscriber = { version = "0.3.16", features = ["env-filter", "std"] }
-systemstat = "0.2.2"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter", "std"] }
+systemstat = "0.2.3"
 _str0m_test = { path = "_str0m_test" } # dummy package that enables "_internal_test_exports"
 
 # This is to ensure MSRV 1.65
