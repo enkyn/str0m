@@ -1,5 +1,17 @@
 # Unreleased
 
+# 0.5.1
+
+  * Expose STUN packet split_username() fn #505
+  * IceAgent fix to not invalidate unrelated remote candidates #504
+  * Expose ice credentials as configuration option #502
+  * Bug fix in lazy NACK handling #501
+  * Net structs Transmit/Receive serde Serializable #500
+  * Payload matching for VP9 #499
+  * IceAgent allow invalidating remote candidates #498
+  * Avoid panic on too early DTLS traffic #495
+  * `IceAgent::handle_packet` return false if packet not accepted #493
+  * Don't panic on STUN requests for unknown NICs #493
   * Improve IceAgent `accepts_message` to avoid panic in some situations #488
 
 # 0.5.0

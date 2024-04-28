@@ -2,6 +2,8 @@ use std::collections::{HashSet, VecDeque};
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
+use serde::{Deserialize, Serialize};
+
 use crate::io::{Id, StunClass, StunMethod, DATAGRAM_MTU_WARN};
 use crate::io::{Protocol, StunPacket};
 use crate::io::{StunMessage, TransId, STUN_TIMEOUT};
@@ -162,7 +164,7 @@ impl IceConnectionState {
 /// Credentials for STUN packages.
 ///
 /// By matching IceCreds in STUN to SDP, we know which STUN belongs to which Peer.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct IceCreds {
     /// From a=ice-ufrag
     pub ufrag: String,
@@ -493,7 +495,7 @@ impl IceAgent {
                 other, c
             );
             other.set_discarded();
-            self.discard_candidate_pairs(idx);
+            self.discard_candidate_pairs_by_local(idx);
         }
 
         // Tie this ufrag to this ICE-session.
@@ -694,23 +696,46 @@ impl IceAgent {
     /// This is done for host candidates disappearing due to changes in the network
     /// interfaces like a WiFi disconnecting or changing IPs.
     ///
+    /// It can also be used to invalidate _remote_ candidates, i.e. if the remote
+    /// has signalled us that they have invalidated one of their candidates.
+    ///
     /// Returns `true` if the candidate was found and invalidated.
     #[allow(unused)]
     pub fn invalidate_candidate(&mut self, c: &Candidate) -> bool {
-        if let Some((idx, other)) =
-            self.local_candidates.iter_mut().enumerate().find(|(_, v)| {
-                v.addr() == c.addr() && v.base() == c.base() && v.raddr() == c.raddr()
-            })
-        {
+        if let Some((idx, other)) = self.local_candidates.iter_mut().enumerate().find(|(_, v)| {
+            v.addr() == c.addr()
+                && v.base() == c.base()
+                && v.raddr() == c.raddr()
+                && v.kind() == c.kind()
+        }) {
             if !other.discarded() {
                 info!("Local candidate to discard {:?}", other);
                 other.set_discarded();
-                self.discard_candidate_pairs(idx);
+                self.discard_candidate_pairs_by_local(idx);
                 return true;
             }
         }
 
-        debug!("Candidate to discard not found: {:?}", c);
+        if let Some((idx, other)) = self
+            .remote_candidates
+            .iter_mut()
+            .enumerate()
+            .find(|(_, v)| {
+                v.addr() == c.addr()
+                    && v.base() == c.base()
+                    && v.raddr() == c.raddr()
+                    && v.kind() == c.kind()
+            })
+        {
+            if !other.discarded() {
+                info!("Remote candidate to discard {:?}", other);
+                other.set_discarded();
+                self.discard_candidate_pairs_by_remote(idx);
+                return true;
+            }
+        }
+
+        debug!("No local or remote candidate found: {:?}", c);
         false
     }
 
@@ -753,9 +778,15 @@ impl IceAgent {
     }
 
     /// Discard candidate pairs that contain the candidate identified by a local index.
-    fn discard_candidate_pairs(&mut self, local_idx: usize) {
+    fn discard_candidate_pairs_by_local(&mut self, local_idx: usize) {
         trace!("Discard pairs for local candidate index: {:?}", local_idx);
         self.candidate_pairs.retain(|c| c.local_idx() != local_idx);
+    }
+
+    /// Discard candidate pairs that contain the candidate identified by a remote index.
+    fn discard_candidate_pairs_by_remote(&mut self, remote: usize) {
+        trace!("Discard pairs for remote candidate index: {:?}", remote);
+        self.candidate_pairs.retain(|c| c.remote_idx() != remote);
     }
 
     /// Tells whether the message is for this agent instance.
@@ -1632,6 +1663,35 @@ mod test {
         // this is redundant given we have the direct host candidate above.
         let x1 = agent.add_local_candidate(Candidate::test_peer_rflx(ipv4_1(), ipv4_1(), "udp"));
         assert!(!x1);
+    }
+
+    #[test]
+    fn does_not_invalidate_local_candidate_with_same_ip_but_different_kind() {
+        let mut agent = IceAgent::new();
+        let host = Candidate::host(ipv4_1(), "udp").unwrap();
+        let srflx = Candidate::server_reflexive(ipv4_1(), ipv4_1(), "udp").unwrap();
+
+        agent.add_local_candidate(host.clone());
+        let invalidated = agent.invalidate_candidate(&srflx);
+        assert!(!invalidated);
+
+        let invalidated = agent.invalidate_candidate(&host);
+        assert!(invalidated);
+    }
+
+    #[test]
+    fn does_not_invalidate_remote_candidate_with_same_ip_but_different_kind() {
+        let mut agent = IceAgent::new();
+        let host = Candidate::host(ipv4_1(), "udp").unwrap();
+        let srflx = Candidate::server_reflexive(ipv4_1(), ipv4_1(), "udp").unwrap();
+
+        agent.add_remote_candidate(host.clone());
+        let invalidated = agent.invalidate_candidate(&srflx);
+
+        assert!(!invalidated);
+
+        let invalidated = agent.invalidate_candidate(&host);
+        assert!(invalidated);
     }
 
     #[test]
